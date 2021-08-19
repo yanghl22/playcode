@@ -1,0 +1,5 @@
+{
+    "watch":["src"],
+    "extension":[".ts"],
+    "exec":"ts-node ./src/XPromise.ts"
+}
