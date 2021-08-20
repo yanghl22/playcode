@@ -1,13 +1,13 @@
-type Resolve = (value: any) => any;
-type Reject = (reason: any) => any;
-type ResolveType = Resolve | undefined;
-type RejectType = Reject | undefined;
+type Resolve = (value: any) => void;
+type Reject = (reason: any) => void;
+type OnFulfilled = (value : any) => any;
+type OnRejected = (reason: any) => any;
 type Executor = (resolve: Resolve, reject: Reject) => void;
 interface Handler {
-  onFulfilled: ResolveType;
-  onRejected: RejectType;
-  nextResolve: ResolveType;
-  nextReject: RejectType;
+  onFulfilled?: OnFulfilled;
+  onRejected?: OnRejected;
+  nextResolve?: Resolve;
+  nextReject?: Reject;
 }
 export default class XPromise {
   status = "pending";
@@ -18,12 +18,64 @@ export default class XPromise {
     executor(this.resolve, this.reject);
   }
 
+  static resolve = (value: any) => {
+    if (value instanceof XPromise) {
+      return value;
+    } else {
+      return new XPromise((resolve, reject) => {
+        resolve(value);
+      });
+    }
+  };
+
+  static reject = (reason: any) => {
+    if (reason instanceof XPromise) {
+      return reason;
+    } else {
+      return new XPromise((resolve, reject) => {
+        reject(reason);
+      });
+    }
+  };
+
+  static race = (promises: XPromise[]): XPromise => {
+    return new XPromise((resolve, reject) => {
+      for (let promise of promises) {
+        XPromise.resolve(promise).then(resolve, reject);
+      }
+    });
+  };
+
+  static all = (promises: XPromise[]): XPromise => {
+    let count = promises.length;
+    let values: any[] = [];
+    return new XPromise((resolve, reject) => {
+      for (let promise of promises) {
+        XPromise.resolve(promise).then((value) => {
+          values.push(value);
+          if (values.length >= count) resolve(values);
+        });
+      }
+    });
+  };
+
+  catch = (onRejected: Reject) => {
+    this.then(onRejected);
+  };
+
+  finally = (onFinal: Resolve | Reject) => {
+    this.then(onFinal, onFinal);
+  };
+
   resolve = (value: any) => {
+    if (this.status === "fulfilled") {
+      return;
+    }
     if (value instanceof XPromise) {
       value.then(this.resolve);
       return;
     }
-    console.log("XPromise resolved! value:", value);
+    // console.log("XPromise resolved! value:", value);
 
     this.value = value;
     this.status = "fulfilled";
@@ -40,20 +92,19 @@ export default class XPromise {
     const { onFulfilled, onRejected, nextResolve, nextReject } = cb;
 
     if (this.status === "pending") {
-      //   console.log("callback is pushed to handlers!");
       this.handlers.push(cb);
     } else if (this.status === "fulfilled") {
       let nextValue = onFulfilled && onFulfilled(this.value);
       nextValue && nextResolve && nextResolve(nextValue);
     } else {
       let nextReason = onRejected && onRejected(this.reason);
-      nextReject && nextReject(nextReason);
+      nextReason && nextReject && nextReject(nextReason);
     }
   };
 
   then = (
-    onFulfilled: ResolveType = undefined,
-    onRejected: RejectType = undefined
+    onFulfilled ? : Resolve,
+    onRejected ?: Reject
   ) => {
     return new XPromise((nextResolve, nextReject) => {
       this.handle({
@@ -65,5 +116,3 @@ export default class XPromise {
     });
   };
 }
-
-
